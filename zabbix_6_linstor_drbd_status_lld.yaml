@@ -1,0 +1,858 @@
+zabbix_export:
+  version: '6.0'
+  date: '2026-09-04T08:30:00Z'
+  groups:
+    - uuid: 16a7a4d080104ac09f838a38e6194fda
+      name: Templates/Storage
+  templates:
+    - uuid: 81337f7cc5e24cb994b719c83055f934
+      template: LINSTOR status by Zabbix agent
+      name: LINSTOR status by Zabbix agent
+      description: |-
+        LINSTORのオブジェクト単位ステータスを監視するZabbix 6.0用テンプレートです。
+        LINSTOR CLIのmachine-readable JSONをsystem.runで取得し、Node、Storage Pool、ResourceをLLDで自動検出します。
+        各オブジェクトについてステータスのみを作成し、容量・性能・統計値は収集しません。
+        LINSTOR Controllerへ接続可能なホストにリンクして使用します。
+        Zabbix Agent側では本テンプレートが使用するsystem.runキーをAllowKeyで明示的に許可してください。
+      groups:
+        - name: Templates/Storage
+      macros:
+        - macro: '{$LINSTOR.NODE.COMMAND}'
+          value: /usr/bin/linstor -m --output-version v1 node list
+          description: Node一覧をmachine-readable JSONで取得するコマンドです。環境に応じてlinstorコマンドのパスやController指定を変更してください。
+        - macro: '{$LINSTOR.STORAGE.POOL.COMMAND}'
+          value: /usr/bin/linstor -m --output-version v1 storage-pool list
+          description: Storage Pool一覧をmachine-readable JSONで取得するコマンドです。
+        - macro: '{$LINSTOR.RESOURCE.COMMAND}'
+          value: /usr/bin/linstor -m --output-version v1 resource list
+          description: Resource一覧をmachine-readable JSONで取得するコマンドです。
+        - macro: '{$LINSTOR.UPDATE.INTERVAL}'
+          value: 1m
+          description: LINSTORのCLI取得間隔です。
+      items:
+        - uuid: 5fd3eb0a46594d3a823092b14624d2b9
+          name: 'LINSTOR: Get node data'
+          key: system.run["{$LINSTOR.NODE.COMMAND}"]
+          delay: '{$LINSTOR.UPDATE.INTERVAL}'
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: LINSTOR Node一覧のmachine-readable JSONを取得するMaster Itemです。
+          tags:
+            - tag: component
+              value: raw
+        - uuid: e4f283a7db0e49adaef24a86f636b372
+          name: 'LINSTOR: Node data'
+          type: DEPENDENT
+          key: linstor.node.data
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: Node LLDとNodeステータスアイテムで使用する正規化済みJSONです。
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |-
+                  var src = JSON.parse(value);
+                  var out = [];
+                  var seen = {};
+
+                  function isArray(v) {
+                      return Object.prototype.toString.call(v) === '[object Array]';
+                  }
+
+                  function stateName(v) {
+                      if (v === 2 || String(v) === '2') {
+                          return 'Online';
+                      }
+                      var s = String(v);
+                      if (s.toUpperCase() === 'ONLINE') {
+                          return 'Online';
+                      }
+                      if (s.toUpperCase().indexOf('OFFLINE') === 0) {
+                          return s.replace(/^OFFLINE/i, 'Offline');
+                      }
+                      if (s.toUpperCase() === 'UNKNOWN') {
+                          return 'Unknown';
+                      }
+                      return s;
+                  }
+
+                  function walk(v) {
+                      var i, k;
+                      if (v === null || typeof v === 'undefined') {
+                          return;
+                      }
+                      if (isArray(v)) {
+                          for (i = 0; i < v.length; i++) {
+                              walk(v[i]);
+                          }
+                          return;
+                      }
+                      if (typeof v !== 'object') {
+                          return;
+                      }
+
+                      if (typeof v.name !== 'undefined' && typeof v.connection_status !== 'undefined') {
+                          var name = String(v.name);
+                          if (!seen[name]) {
+                              out.push({
+                                  name: name,
+                                  type: typeof v.type === 'undefined' ? '' : String(v.type),
+                                  state: stateName(v.connection_status)
+                              });
+                              seen[name] = true;
+                          }
+                          return;
+                      }
+
+                      for (k in v) {
+                          if (Object.prototype.hasOwnProperty.call(v, k)) {
+                              walk(v[k]);
+                          }
+                      }
+                  }
+
+                  walk(src);
+                  return JSON.stringify(out);
+          master_item:
+            key: system.run["{$LINSTOR.NODE.COMMAND}"]
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 8562465c0b8a4ecda98108256796ff10
+          name: 'LINSTOR: Get storage pool data'
+          key: system.run["{$LINSTOR.STORAGE.POOL.COMMAND}"]
+          delay: '{$LINSTOR.UPDATE.INTERVAL}'
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: LINSTOR Storage Pool一覧のmachine-readable JSONを取得するMaster Itemです。
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 43e843e219fa4268a4787d986cee381d
+          name: 'LINSTOR: Storage pool data'
+          type: DEPENDENT
+          key: linstor.storage_pool.data
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: Storage Pool LLDとStorage Poolステータスアイテムで使用する正規化済みJSONです。reportsが存在するStorage PoolはIssueとして扱います。
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |-
+                  var src = JSON.parse(value);
+                  var out = [];
+                  var seen = {};
+
+                  function isArray(v) {
+                      return Object.prototype.toString.call(v) === '[object Array]';
+                  }
+
+                  function walk(v) {
+                      var i, k;
+                      if (v === null || typeof v === 'undefined') {
+                          return;
+                      }
+                      if (isArray(v)) {
+                          for (i = 0; i < v.length; i++) {
+                              walk(v[i]);
+                          }
+                          return;
+                      }
+                      if (typeof v !== 'object') {
+                          return;
+                      }
+
+                      if (typeof v.storage_pool_name !== 'undefined' && typeof v.node_name !== 'undefined') {
+                          var node = String(v.node_name);
+                          var pool = String(v.storage_pool_name);
+                          var id = node + '\u0000' + pool;
+                          if (!seen[id]) {
+                              var reports = v.reports;
+                              var state = (isArray(reports) && reports.length > 0) ? 'Issue' : 'Ok';
+                              out.push({
+                                  node: node,
+                                  pool: pool,
+                                  provider: typeof v.provider_kind === 'undefined' ? '' : String(v.provider_kind),
+                                  state: state
+                              });
+                              seen[id] = true;
+                          }
+                          return;
+                      }
+
+                      for (k in v) {
+                          if (Object.prototype.hasOwnProperty.call(v, k)) {
+                              walk(v[k]);
+                          }
+                      }
+                  }
+
+                  walk(src);
+                  return JSON.stringify(out);
+          master_item:
+            key: system.run["{$LINSTOR.STORAGE.POOL.COMMAND}"]
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 20f915af55f5479abf6d1d50e6f8657d
+          name: 'LINSTOR: Get resource data'
+          key: system.run["{$LINSTOR.RESOURCE.COMMAND}"]
+          delay: '{$LINSTOR.UPDATE.INTERVAL}'
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: LINSTOR Resource一覧のmachine-readable JSONを取得するMaster Itemです。
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 01d915cec03d47488aa51b5b47d9f4fa
+          name: 'LINSTOR: Resource data'
+          type: DEPENDENT
+          key: linstor.resource.data
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: Resource LLDとResourceステータスアイテムで使用する正規化済みJSONです。Resource配下Volumeのdisk_stateからResource状態を集約します。
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |-
+                  var src = JSON.parse(value);
+                  var out = [];
+                  var seen = {};
+
+                  function isArray(v) {
+                      return Object.prototype.toString.call(v) === '[object Array]';
+                  }
+
+                  function hasDisklessFlag(flags) {
+                      var i;
+                      if (!isArray(flags)) {
+                          return false;
+                      }
+                      for (i = 0; i < flags.length; i++) {
+                          if (String(flags[i]).toUpperCase().indexOf('DISKLESS') >= 0) {
+                              return true;
+                          }
+                      }
+                      return false;
+                  }
+
+                  function resourceState(v) {
+                      var states = [];
+                      var unique = {};
+                      var i;
+                      var intentionalDiskless = hasDisklessFlag(v.flags);
+                      var volumes = isArray(v.volumes) ? v.volumes : [];
+
+                      for (i = 0; i < volumes.length; i++) {
+                          var s = null;
+                          if (volumes[i].state && typeof volumes[i].state.disk_state !== 'undefined') {
+                              s = String(volumes[i].state.disk_state);
+                          } else if (typeof volumes[i].disk_state !== 'undefined') {
+                              s = String(volumes[i].disk_state);
+                          }
+                          if (s !== null && s !== '') {
+                              if (s === 'Diskless' && !intentionalDiskless) {
+                                  s = 'Diskless (Unexpected)';
+                              }
+                              if (!unique[s]) {
+                                  states.push(s);
+                                  unique[s] = true;
+                              }
+                          }
+                      }
+
+                      if (states.length === 0) {
+                          return 'Unknown';
+                      }
+                      if (states.length === 1) {
+                          return states[0];
+                      }
+
+                      var healthy = true;
+                      for (i = 0; i < states.length; i++) {
+                          if (states[i] !== 'UpToDate' && states[i] !== 'Diskless') {
+                              healthy = false;
+                              break;
+                          }
+                      }
+                      if (healthy) {
+                          return 'UpToDate/Diskless';
+                      }
+                      return states.join('/');
+                  }
+
+                  function walk(v) {
+                      var i, k;
+                      if (v === null || typeof v === 'undefined') {
+                          return;
+                      }
+                      if (isArray(v)) {
+                          for (i = 0; i < v.length; i++) {
+                              walk(v[i]);
+                          }
+                          return;
+                      }
+                      if (typeof v !== 'object') {
+                          return;
+                      }
+
+                      if (typeof v.name !== 'undefined' && typeof v.node_name !== 'undefined' && typeof v.volumes !== 'undefined') {
+                          var node = String(v.node_name);
+                          var name = String(v.name);
+                          var id = node + '\u0000' + name;
+                          if (!seen[id]) {
+                              out.push({node: node, resource: name, state: resourceState(v)});
+                              seen[id] = true;
+                          }
+                          return;
+                      }
+
+                      for (k in v) {
+                          if (Object.prototype.hasOwnProperty.call(v, k)) {
+                              walk(v[k]);
+                          }
+                      }
+                  }
+
+                  walk(src);
+                  return JSON.stringify(out);
+          master_item:
+            key: system.run["{$LINSTOR.RESOURCE.COMMAND}"]
+          tags:
+            - tag: component
+              value: raw
+      discovery_rules:
+        - uuid: 8e02d8113071481c9e2d3f2e89664cd2
+          name: LINSTOR node discovery
+          type: DEPENDENT
+          key: linstor.node.discovery
+          lifetime: 7d
+          description: LINSTOR Nodeを自動検出します。Node名をLLDマクロ{#NODE}として使用し、NodeごとのStateアイテムとトリガーを生成します。
+          item_prototypes:
+            - uuid: 146738ce84174207a875f307cc0efacd
+              name: 'LINSTOR node {#NODE}: State'
+              type: DEPENDENT
+              key: linstor.node.state["{#NODE}"]
+              value_type: CHAR
+              description: 対象LINSTOR Nodeの接続状態です。正常時はOnlineです。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $[?(@.name=="{#NODE}")].state.first()
+              master_item:
+                key: linstor.node.data
+              tags:
+                - tag: component
+                  value: node
+                - tag: node
+                  value: '{#NODE}'
+          trigger_prototypes:
+            - uuid: 53101d26ff424a08b22726eb0e2d7d45
+              expression: last(/LINSTOR status by Zabbix agent/linstor.node.state["{#NODE}"])<>"Online"
+              name: 'LINSTOR node {#NODE}: State is not Online'
+              priority: HIGH
+              description: 対象LINSTOR NodeがOnline以外の状態です。LINSTOR ControllerとSatellite間の接続状態を確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: linstor.node.data
+          lld_macro_paths:
+            - lld_macro: '{#NODE}'
+              path: $.name
+            - lld_macro: '{#NODETYPE}'
+              path: $.type
+        - uuid: 0ac6e19bb7934c19809ce39d2980c7c8
+          name: LINSTOR storage pool discovery
+          type: DEPENDENT
+          key: linstor.storage_pool.discovery
+          lifetime: 7d
+          description: LINSTOR Storage PoolをNodeとStorage Pool名の組み合わせで自動検出します。Storage PoolごとのStateアイテムとトリガーを生成します。
+          item_prototypes:
+            - uuid: 60f7aa3873bd4993abb388585f83654c
+              name: 'LINSTOR storage pool {#NODE}/{#POOL}: State'
+              type: DEPENDENT
+              key: linstor.storage_pool.state["{#NODE}","{#POOL}"]
+              value_type: CHAR
+              description: 対象Storage Poolの状態です。正常時はOkです。machine-readable出力のreportsが存在する場合はIssueとして扱います。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $[?(@.node=="{#NODE}" && @.pool=="{#POOL}")].state.first()
+              master_item:
+                key: linstor.storage_pool.data
+              tags:
+                - tag: component
+                  value: storage-pool
+                - tag: node
+                  value: '{#NODE}'
+                - tag: storage-pool
+                  value: '{#POOL}'
+          trigger_prototypes:
+            - uuid: ce1dd42f95ca42519fe7185d9a81a49b
+              expression: last(/LINSTOR status by Zabbix agent/linstor.storage_pool.state["{#NODE}","{#POOL}"])<>"Ok"
+              name: 'LINSTOR storage pool {#NODE}/{#POOL}: State is not Ok'
+              priority: HIGH
+              description: 対象Storage Poolに問題を示すreportが存在します。linstor storage-pool listおよびError Reportを確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: linstor.storage_pool.data
+          lld_macro_paths:
+            - lld_macro: '{#NODE}'
+              path: $.node
+            - lld_macro: '{#POOL}'
+              path: $.pool
+            - lld_macro: '{#PROVIDER}'
+              path: $.provider
+        - uuid: 37ac50d9c2ba4dbdabb7697b7ddc61c5
+          name: LINSTOR resource discovery
+          type: DEPENDENT
+          key: linstor.resource.discovery
+          lifetime: 7d
+          description: LINSTOR Resourceを配置NodeとResource名の組み合わせで自動検出します。ResourceごとのStateアイテムとトリガーを生成します。容量や性能値は収集しません。
+          item_prototypes:
+            - uuid: 9fe18fded06742f9a731b56374c9fce3
+              name: 'LINSTOR resource {#NODE}/{#RESOURCE}: State'
+              type: DEPENDENT
+              key: linstor.resource.state["{#NODE}","{#RESOURCE}"]
+              value_type: CHAR
+              description: 対象Resourceの状態です。配下Volumeのdisk_stateを集約します。UpToDateおよび意図的なDisklessは正常として扱います。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $[?(@.node=="{#NODE}" && @.resource=="{#RESOURCE}")].state.first()
+              master_item:
+                key: linstor.resource.data
+              tags:
+                - tag: component
+                  value: resource
+                - tag: node
+                  value: '{#NODE}'
+                - tag: resource
+                  value: '{#RESOURCE}'
+          trigger_prototypes:
+            - uuid: 8feef1e95510411dba5be3b7c2496eef
+              expression: last(/LINSTOR status by Zabbix agent/linstor.resource.state["{#NODE}","{#RESOURCE}"])<>"UpToDate" and last(/LINSTOR status by Zabbix agent/linstor.resource.state["{#NODE}","{#RESOURCE}"])<>"Diskless" and last(/LINSTOR status by Zabbix agent/linstor.resource.state["{#NODE}","{#RESOURCE}"])<>"UpToDate/Diskless"
+              name: 'LINSTOR resource {#NODE}/{#RESOURCE}: State is unhealthy'
+              priority: HIGH
+              description: 対象ResourceのVolume状態にUpToDateまたは意図的なDiskless以外の状態があります。LINSTORおよびDRBDの状態を確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: linstor.resource.data
+          lld_macro_paths:
+            - lld_macro: '{#NODE}'
+              path: $.node
+            - lld_macro: '{#RESOURCE}'
+              path: $.resource
+    - uuid: 3b5b39d3603145989c72333fad778e06
+      template: DRBD status by Zabbix agent
+      name: DRBD status by Zabbix agent
+      description: |-
+        DRBDのオブジェクト単位ステータスを監視するZabbix 6.0用テンプレートです。
+        drbdsetup status --json allの結果をsystem.runで1回取得し、Resource、Connection、Device、Peer DeviceをLLDで自動検出します。
+        各オブジェクトの状態のみを監視し、I/O統計や転送量などの性能値は収集しません。
+        LINSTOR管理下の意図的なDisklessは正常扱いし、Disklessでclient/peer-clientがfalseの場合はDiskless (Unexpected)として異常判定します。
+        Zabbix Agentからdrbdsetup statusを実行できるよう、必要最小限のsudoers設定とsystem.runのAllowKey設定を行ってください。
+      groups:
+        - name: Templates/Storage
+      macros:
+        - macro: '{$DRBD.STATUS.COMMAND}'
+          value: /usr/bin/sudo -n /usr/sbin/drbdsetup status --json all
+          description: DRBD全リソースの状態をJSONで取得するコマンドです。環境に応じてdrbdsetupおよびsudoのパスを変更してください。
+        - macro: '{$DRBD.UPDATE.INTERVAL}'
+          value: 1m
+          description: DRBD状態のCLI取得間隔です。
+      items:
+        - uuid: 395c56ee6ba34749b2728c08651cb0ba
+          name: 'DRBD: Get status data'
+          key: system.run["{$DRBD.STATUS.COMMAND}"]
+          delay: '{$DRBD.UPDATE.INTERVAL}'
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: drbdsetup status --json allの結果を取得するMaster Itemです。1回のCLI実行結果をすべてのDRBD LLDとステータスアイテムで共有します。
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 4351e92f8503475892e1a9ba8b658e0c
+          name: 'DRBD: Status data'
+          type: DEPENDENT
+          key: drbd.status.data
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          description: DRBDのJSONをResource、Connection、Device、Peer Deviceの配列へ正規化した内部データです。
+          preprocessing:
+            - type: JAVASCRIPT
+              parameters:
+                - |-
+                  var src = JSON.parse(value);
+                  var result = {
+                      resources: [],
+                      connections: [],
+                      devices: [],
+                      peer_devices: []
+                  };
+
+                  function isArray(v) {
+                      return Object.prototype.toString.call(v) === '[object Array]';
+                  }
+
+                  function isTrue(v) {
+                      if (v === true || v === 1) {
+                          return true;
+                      }
+                      var s = String(v).toLowerCase();
+                      return s === 'true' || s === 'yes' || s === '1';
+                  }
+
+                  if (!isArray(src)) {
+                      throw 'Unexpected DRBD JSON format';
+                  }
+
+                  for (var i = 0; i < src.length; i++) {
+                      var r = src[i];
+                      if (!r || typeof r.name === 'undefined') {
+                          continue;
+                      }
+                      var rname = String(r.name);
+                      result.resources.push({
+                          name: rname,
+                          role: typeof r.role === 'undefined' ? 'Unknown' : String(r.role),
+                          suspended: isTrue(r.suspended) ? 1 : 0
+                      });
+
+                      var devices = isArray(r.devices) ? r.devices : [];
+                      for (var d = 0; d < devices.length; d++) {
+                          var dev = devices[d];
+                          var diskState = typeof dev['disk-state'] === 'undefined' ? 'Unknown' : String(dev['disk-state']);
+                          if (diskState === 'Diskless' && !isTrue(dev.client)) {
+                              diskState = 'Diskless (Unexpected)';
+                          }
+                          result.devices.push({
+                              resource: rname,
+                              volume: String(dev.volume),
+                              disk_state: diskState,
+                              quorum: isTrue(dev.quorum) ? 1 : 0
+                          });
+                      }
+
+                      var connections = isArray(r.connections) ? r.connections : [];
+                      for (var c = 0; c < connections.length; c++) {
+                          var con = connections[c];
+                          var peer = typeof con.name === 'undefined' ? String(con['peer-node-id']) : String(con.name);
+                          result.connections.push({
+                              resource: rname,
+                              peer: peer,
+                              state: typeof con['connection-state'] === 'undefined' ? 'Unknown' : String(con['connection-state'])
+                          });
+
+                          var peerDevices = isArray(con.peer_devices) ? con.peer_devices : [];
+                          for (var p = 0; p < peerDevices.length; p++) {
+                              var pd = peerDevices[p];
+                              var peerDiskState = typeof pd['peer-disk-state'] === 'undefined' ? 'Unknown' : String(pd['peer-disk-state']);
+                              if (peerDiskState === 'Diskless' && !isTrue(pd['peer-client'])) {
+                                  peerDiskState = 'Diskless (Unexpected)';
+                              }
+                              result.peer_devices.push({
+                                  resource: rname,
+                                  peer: peer,
+                                  volume: String(pd.volume),
+                                  replication_state: typeof pd['replication-state'] === 'undefined' ? 'Unknown' : String(pd['replication-state']),
+                                  peer_disk_state: peerDiskState
+                              });
+                          }
+                      }
+                  }
+
+                  return JSON.stringify(result);
+          master_item:
+            key: system.run["{$DRBD.STATUS.COMMAND}"]
+          tags:
+            - tag: component
+              value: raw
+      discovery_rules:
+        - uuid: a432ee056f73425c880e41181c07ceb3
+          name: DRBD resource discovery
+          type: DEPENDENT
+          key: drbd.resource.discovery
+          lifetime: 7d
+          description: DRBD Resourceを自動検出します。ResourceごとのRoleとSuspended状態を生成します。
+          item_prototypes:
+            - uuid: b3cd2426367d4884a5c3e2ca5252ee3c
+              name: 'DRBD resource {#RESOURCE}: Role'
+              type: DEPENDENT
+              key: drbd.resource.role["{#RESOURCE}"]
+              value_type: CHAR
+              description: 対象DRBD ResourceのRoleです。PrimaryまたはSecondaryなどの現在値を表示します。Role単独では異常判定しません。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.resources[?(@.name=="{#RESOURCE}")].role.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: resource
+                - tag: resource
+                  value: '{#RESOURCE}'
+            - uuid: 27ac5ae52667480296a99baeda252742
+              name: 'DRBD resource {#RESOURCE}: Suspended'
+              type: DEPENDENT
+              key: drbd.resource.suspended["{#RESOURCE}"]
+              description: 対象DRBD ResourceのI/O suspended状態です。0はNot suspended、1はSuspendedを示します。
+              valuemap:
+                name: DRBD suspended state
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.resources[?(@.name=="{#RESOURCE}")].suspended.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: resource
+                - tag: resource
+                  value: '{#RESOURCE}'
+          trigger_prototypes:
+            - uuid: b484a95d452a4031a73ffa6ff3d80c24
+              expression: last(/DRBD status by Zabbix agent/drbd.resource.suspended["{#RESOURCE}"])=1
+              name: 'DRBD resource {#RESOURCE}: I/O is suspended'
+              priority: HIGH
+              description: 対象DRBD Resourceがsuspended状態です。quorum、fencing、no-data-accessibleなどの原因をdrbdsetup statusで確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: drbd.status.data
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.resources
+          lld_macro_paths:
+            - lld_macro: '{#RESOURCE}'
+              path: $.name
+        - uuid: 4f0ba9608b2947d0a18211e192d436c9
+          name: DRBD connection discovery
+          type: DEPENDENT
+          key: drbd.connection.discovery
+          lifetime: 7d
+          description: DRBD ConnectionをResourceとPeerの組み合わせで自動検出します。ConnectionごとのStateを生成します。
+          item_prototypes:
+            - uuid: 1722c30fcfd947a4bf3a634028e42440
+              name: 'DRBD connection {#RESOURCE}/{#PEER}: State'
+              type: DEPENDENT
+              key: drbd.connection.state["{#RESOURCE}","{#PEER}"]
+              value_type: CHAR
+              description: 対象DRBD Connectionの接続状態です。正常時はConnectedです。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.connections[?(@.resource=="{#RESOURCE}" && @.peer=="{#PEER}")].state.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: connection
+                - tag: resource
+                  value: '{#RESOURCE}'
+                - tag: peer
+                  value: '{#PEER}'
+          trigger_prototypes:
+            - uuid: 6ad50cd799a14f22b8dde07a98742937
+              expression: last(/DRBD status by Zabbix agent/drbd.connection.state["{#RESOURCE}","{#PEER}"])<>"Connected"
+              name: 'DRBD connection {#RESOURCE}/{#PEER}: State is not Connected'
+              priority: HIGH
+              description: 対象PeerとのDRBD ConnectionがConnected以外です。ネットワーク、Peer稼働状態、DRBD Connection状態を確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: drbd.status.data
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.connections
+          lld_macro_paths:
+            - lld_macro: '{#RESOURCE}'
+              path: $.resource
+            - lld_macro: '{#PEER}'
+              path: $.peer
+        - uuid: 7061d48e0e2141deb366a6e0b2520444
+          name: DRBD device discovery
+          type: DEPENDENT
+          key: drbd.device.discovery
+          lifetime: 7d
+          description: DRBD local DeviceをResourceとVolume番号の組み合わせで自動検出します。Disk StateとQuorumを生成します。
+          item_prototypes:
+            - uuid: f3800b8b502449a780c6c60346043560
+              name: 'DRBD device {#RESOURCE}/volume {#VOLUME}: Disk state'
+              type: DEPENDENT
+              key: drbd.device.disk_state["{#RESOURCE}","{#VOLUME}"]
+              value_type: CHAR
+              description: 対象ローカルDRBD DeviceのDisk Stateです。UpToDateおよび意図的なDisklessを正常として扱います。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.devices[?(@.resource=="{#RESOURCE}" && @.volume=="{#VOLUME}")].disk_state.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: device
+                - tag: resource
+                  value: '{#RESOURCE}'
+                - tag: volume
+                  value: '{#VOLUME}'
+            - uuid: 7e716b1b68ba4d239e4edcc187c87321
+              name: 'DRBD device {#RESOURCE}/volume {#VOLUME}: Quorum'
+              type: DEPENDENT
+              key: drbd.device.quorum["{#RESOURCE}","{#VOLUME}"]
+              description: 対象ローカルDRBD DeviceのQuorum状態です。1はQuorumあり、0はQuorumなしを示します。
+              valuemap:
+                name: DRBD quorum state
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.devices[?(@.resource=="{#RESOURCE}" && @.volume=="{#VOLUME}")].quorum.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: device
+                - tag: resource
+                  value: '{#RESOURCE}'
+                - tag: volume
+                  value: '{#VOLUME}'
+          trigger_prototypes:
+            - uuid: 815e9d9a6bbc4839a6714fd1522b9275
+              expression: last(/DRBD status by Zabbix agent/drbd.device.disk_state["{#RESOURCE}","{#VOLUME}"])<>"UpToDate" and last(/DRBD status by Zabbix agent/drbd.device.disk_state["{#RESOURCE}","{#VOLUME}"])<>"Diskless"
+              name: 'DRBD device {#RESOURCE}/volume {#VOLUME}: Disk state is unhealthy'
+              priority: HIGH
+              description: 対象ローカルDRBD DeviceがUpToDateまたは意図的なDiskless以外の状態です。
+              tags:
+                - tag: scope
+                  value: availability
+            - uuid: ab3e2ffc7cee463bbfd3378caab9f875
+              expression: last(/DRBD status by Zabbix agent/drbd.device.quorum["{#RESOURCE}","{#VOLUME}"])=0
+              name: 'DRBD device {#RESOURCE}/volume {#VOLUME}: Quorum is lost'
+              priority: HIGH
+              description: 対象DRBD DeviceがQuorumを失っています。Peer状態とDRBD quorum設定を確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: drbd.status.data
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.devices
+          lld_macro_paths:
+            - lld_macro: '{#RESOURCE}'
+              path: $.resource
+            - lld_macro: '{#VOLUME}'
+              path: $.volume
+        - uuid: 70332cf038724ea8a69b8931e16e3ab2
+          name: DRBD peer device discovery
+          type: DEPENDENT
+          key: drbd.peer_device.discovery
+          lifetime: 7d
+          description: DRBD Peer DeviceをResource、Peer、Volume番号の組み合わせで自動検出します。Replication StateとPeer Disk Stateを生成します。
+          item_prototypes:
+            - uuid: 1ec1e4bf7993427bafbc015a237b0bcb
+              name: 'DRBD peer device {#RESOURCE}/{#PEER}/volume {#VOLUME}: Replication state'
+              type: DEPENDENT
+              key: drbd.peer_device.replication_state["{#RESOURCE}","{#PEER}","{#VOLUME}"]
+              value_type: CHAR
+              description: 対象Peer DeviceのReplication Stateです。定常正常時はEstablishedです。SyncSource/SyncTargetなどは同期処理中の状態としてそのまま表示します。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.peer_devices[?(@.resource=="{#RESOURCE}" && @.peer=="{#PEER}" && @.volume=="{#VOLUME}")].replication_state.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: peer-device
+                - tag: resource
+                  value: '{#RESOURCE}'
+                - tag: peer
+                  value: '{#PEER}'
+                - tag: volume
+                  value: '{#VOLUME}'
+            - uuid: b4a11727685943aaada3c082f167c88a
+              name: 'DRBD peer device {#RESOURCE}/{#PEER}/volume {#VOLUME}: Peer disk state'
+              type: DEPENDENT
+              key: drbd.peer_device.disk_state["{#RESOURCE}","{#PEER}","{#VOLUME}"]
+              value_type: CHAR
+              description: 対象Peer DeviceのPeer Disk Stateです。UpToDateおよび意図的なDisklessを正常として扱います。
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.peer_devices[?(@.resource=="{#RESOURCE}" && @.peer=="{#PEER}" && @.volume=="{#VOLUME}")].peer_disk_state.first()
+              master_item:
+                key: drbd.status.data
+              tags:
+                - tag: component
+                  value: peer-device
+                - tag: resource
+                  value: '{#RESOURCE}'
+                - tag: peer
+                  value: '{#PEER}'
+                - tag: volume
+                  value: '{#VOLUME}'
+          trigger_prototypes:
+            - uuid: c45ffe9eda9c4c04b5d3b5b38a95568e
+              expression: last(/DRBD status by Zabbix agent/drbd.peer_device.replication_state["{#RESOURCE}","{#PEER}","{#VOLUME}"])<>"Established"
+              name: 'DRBD peer device {#RESOURCE}/{#PEER}/volume {#VOLUME}: Replication state is not Established'
+              priority: WARNING
+              description: 対象Peer DeviceのReplication StateがEstablished以外です。再同期中の場合はSyncSource/SyncTargetなどが表示されます。継続する場合はDRBD状態を確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+            - uuid: 043a3cc396ff49a4a98148ea19ff2f27
+              expression: last(/DRBD status by Zabbix agent/drbd.peer_device.disk_state["{#RESOURCE}","{#PEER}","{#VOLUME}"])<>"UpToDate" and last(/DRBD status by Zabbix agent/drbd.peer_device.disk_state["{#RESOURCE}","{#PEER}","{#VOLUME}"])<>"Diskless"
+              name: 'DRBD peer device {#RESOURCE}/{#PEER}/volume {#VOLUME}: Peer disk state is unhealthy'
+              priority: HIGH
+              description: 対象Peer DeviceのDisk StateがUpToDateまたは意図的なDiskless以外です。Peer側のDRBD Disk Stateを確認してください。
+              tags:
+                - tag: scope
+                  value: availability
+          master_item:
+            key: drbd.status.data
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.peer_devices
+          lld_macro_paths:
+            - lld_macro: '{#RESOURCE}'
+              path: $.resource
+            - lld_macro: '{#PEER}'
+              path: $.peer
+            - lld_macro: '{#VOLUME}'
+              path: $.volume
+      valuemaps:
+        - uuid: 4380fb6bd9e844588e82f6da725582a1
+          name: DRBD suspended state
+          mappings:
+            - value: '0'
+              newvalue: Not suspended
+            - value: '1'
+              newvalue: Suspended
+        - uuid: c3cdcefb23f24ad0b35067b4cf9b65bf
+          name: DRBD quorum state
+          mappings:
+            - value: '0'
+              newvalue: No quorum
+            - value: '1'
+              newvalue: Quorum
