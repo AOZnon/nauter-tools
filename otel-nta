@@ -1,39 +1,40 @@
-receivers:
-  syslog/netapp:
-    tcp:
-      listen_address: "0.0.0.0:5514"
-    protocol: rfc5424
+[[inputs.syslog]]
+  server = "tcp4://:5514"
+  framing = "non-transparent"
+  trailer = "LF"
+  syslog_standard = "RFC5424"
 
-    operators:
-      - type: move
-        from: attributes.hostname
-        to: resource["host.name"]
+  [inputs.syslog.tags]
+    service_namespace = "storage"
+    service_name = "netapp-ontap"
 
-      - type: add
-        field: resource["service.namespace"]
-        value: storage
 
-      - type: add
-        field: resource["service.name"]
-        value: netapp-ontap
+[[processors.rename]]
+  order = 1
+  namepass = ["syslog"]
 
-processors:
-  batch: {}
+  [[processors.rename.replace]]
+    tag = "hostname"
+    dest = "host_name"
 
-exporters:
-  otlp_http/loki:
-    endpoint: http://<LOKI_ADDRESS>:3100/otlp
 
-service:
-  telemetry:
-    logs:
-      level: warn
+[[processors.converter]]
+  order = 2
+  namepass = ["syslog"]
 
-  pipelines:
-    logs/netapp:
-      receivers:
-        - syslog/netapp
-      processors:
-        - batch
-      exporters:
-        - otlp_http/loki
+  [processors.converter.tags]
+    string = ["severity", "facility", "appname", "source"]
+
+
+[[outputs.loki]]
+  domain = "http://<LOKI_ADDRESS>:3100"
+  endpoint = "/loki/api/v1/push"
+  timeout = "5s"
+
+  metric_name_label = ""
+
+  taginclude = [
+    "service_namespace",
+    "service_name",
+    "host_name"
+  ]
