@@ -1,0 +1,39 @@
+receivers:
+  syslog/netapp:
+    tcp:
+      listen_address: "0.0.0.0:5514"
+    protocol: rfc5424
+
+    operators:
+      - type: move
+        from: attributes.hostname
+        to: resource["host.name"]
+
+      - type: add
+        field: resource["service.namespace"]
+        value: storage
+
+      - type: add
+        field: resource["service.name"]
+        value: netapp-ontap
+
+processors:
+  batch: {}
+
+exporters:
+  otlp_http/loki:
+    endpoint: http://<LOKI_ADDRESS>:3100/otlp
+
+service:
+  telemetry:
+    logs:
+      level: warn
+
+  pipelines:
+    logs/netapp:
+      receivers:
+        - syslog/netapp
+      processors:
+        - batch
+      exporters:
+        - otlp_http/loki
