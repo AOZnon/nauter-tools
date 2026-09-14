@@ -1,0 +1,15 @@
+[[processors.starlark]]
+  namepass = ["syslog"]
+  order = 10
+
+  source = '''
+def apply(metric):
+    msg = ""
+    if "message" in metric.fields:
+        msg = str(metric.fields["message"])
+
+    if "GET" in msg:
+        return None
+
+    return metric
+'''
