@@ -1,0 +1,42 @@
+Cisco Catalyst 2960
+Gi1/0/10 trunk configuration
+
+enable
+configure terminal
+
+interface GigabitEthernet1/0/10
+ switchport mode trunk
+ switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ speed 1000
+ duplex full
+ no shutdown
+ exit
+
+end
+
+# Verification
+show interfaces GigabitEthernet1/0/10 switchport
+show interfaces trunk
+show running-config interface GigabitEthernet1/0/10
+
+# Save
+write memory
+
+# Allowed VLAN IDs
+1100
+1101
+1102
+1103
+1132
+1133
+1134
+1135
+1164
+1165
+1166
+1167
+2200
+2201
+3300
+3332
+3364
