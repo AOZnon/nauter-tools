@@ -1,0 +1,75 @@
+enable
+configure terminal
+
+vlan 1100
+ exit
+vlan 1101
+ exit
+vlan 1102
+ exit
+vlan 1103
+ exit
+vlan 1132
+ exit
+vlan 1133
+ exit
+vlan 1134
+ exit
+vlan 1135
+ exit
+vlan 1164
+ exit
+vlan 1165
+ exit
+vlan 1166
+ exit
+vlan 1167
+ exit
+vlan 2200
+ exit
+vlan 2201
+ exit
+vlan 3300
+ exit
+vlan 3332
+ exit
+vlan 3364
+ exit
+
+! APPLY - pve04 / Proxmox bond0 / Port-channel1
+interface range GigabitEthernet1/0/10 - 13
+ description pve04 bond0 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ speed auto
+ duplex auto
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description pve04 bond0 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ no shutdown
+ exit
+
+! APPLY - pve05 / Proxmox bond0 / Port-channel2
+interface range GigabitEthernet1/0/14 - 17
+ description pve05 bond0 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ speed auto
+ duplex auto
+ channel-group 2 mode active
+ no shutdown
+ exit
+
+interface Port-channel2
+ description pve05 bond0 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ no shutdown
+ exit
+
+end
