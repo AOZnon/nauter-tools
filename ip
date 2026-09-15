@@ -1,7 +1,9 @@
 @echo off
-set /p IP="IP Address: "
-set /p MASK="MASK: "
-set /p GW="GW: "
 
-netsh interface ipv4 set address name="イーサネット" static %IP% %MASK% %GW%
+set /p "IP=IP Address: "
+set /p "MASK=Subnet Mask: "
+set /p "GW=Default Gateway: "
+
+netsh interface ipv4 set address "イーサネット" static %IP% %MASK% %GW%
+
 pause
