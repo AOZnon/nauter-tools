@@ -1,0 +1,123 @@
+enable
+configure terminal
+
+vlan 104
+ exit
+vlan 105
+ exit
+vlan 106
+ exit
+vlan 107
+ exit
+vlan 112
+ exit
+vlan 113
+ exit
+vlan 114
+ exit
+vlan 115
+ exit
+vlan 136
+ exit
+vlan 137
+ exit
+vlan 138
+ exit
+vlan 139
+ exit
+vlan 144
+ exit
+vlan 145
+ exit
+vlan 146
+ exit
+vlan 147
+ exit
+vlan 168
+ exit
+vlan 169
+ exit
+vlan 171
+ exit
+vlan 176
+ exit
+vlan 177
+ exit
+vlan 179
+ exit
+vlan 180
+ exit
+vlan 181
+ exit
+vlan 184
+ exit
+vlan 185
+ exit
+vlan 208
+ exit
+vlan 209
+ exit
+vlan 210
+ exit
+vlan 211
+ exit
+vlan 997
+ exit
+vlan 998
+ exit
+
+! APPLY - pve01 / Proxmox bond1 / Port-channel1
+interface range GigabitEthernet1/0/10 - 13
+ description pve01 bond1 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ speed auto
+ duplex auto
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description pve01 bond1 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ no shutdown
+ exit
+
+! APPLY - pve02 / Proxmox bond1 / Port-channel2
+interface range GigabitEthernet1/0/14 - 17
+ description pve02 bond1 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ speed auto
+ duplex auto
+ channel-group 2 mode active
+ no shutdown
+ exit
+
+interface Port-channel2
+ description pve02 bond1 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ no shutdown
+ exit
+
+! APPLY - pve03 / Proxmox bond1 / Port-channel3
+interface range GigabitEthernet1/0/18 - 21
+ description pve03 bond1 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ speed auto
+ duplex auto
+ channel-group 3 mode active
+ no shutdown
+ exit
+
+interface Port-channel3
+ description pve03 bond1 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ no shutdown
+ exit
+
+end
