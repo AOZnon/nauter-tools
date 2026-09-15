@@ -1,14 +1,29 @@
 @echo off
+chcp 932 >nul
+setlocal enabledelayedexpansion
 
-echo IP Address:
-set /p IP=
+:: ===============================================
+::  イーサネット IP/サブネット 設定ツール
+:: ===============================================
 
-echo Subnet Mask:
-set /p MASK=
+:: 管理者権限チェック
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo [エラー] このツールは管理者権限で実行してください。
+    echo バッチファイルを右クリックし「管理者として実行」を選んでください。
+    echo.
+    pause
+    exit /b 1
+)
 
-echo Default Gateway:
-set /p GW=
+echo ===============================================
+echo   イーサネット IP/サブネット 設定ツール
+echo ===============================================
+echo.
 
-netsh interface ip set address "イーサネット" static %IP% %MASK% %GW% 1
-
-pause
+:: 現在のイーサネットアダプタ一覧を表示
+echo 現在のネットワークアダプタ一覧:
+echo -----------------------------------------------
+netsh interface show interface
+echo -----------------------
