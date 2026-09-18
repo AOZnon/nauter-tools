@@ -1,6 +1,25 @@
 enable
 configure terminal
 
+! ============================================================
+! RESET TARGET INTERFACES FIRST
+! ============================================================
+default interface GigabitEthernet1/0/10
+default interface GigabitEthernet1/0/11
+default interface GigabitEthernet1/0/12
+default interface GigabitEthernet1/0/13
+default interface GigabitEthernet1/0/14
+default interface GigabitEthernet1/0/15
+default interface GigabitEthernet1/0/16
+default interface GigabitEthernet1/0/17
+default interface GigabitEthernet1/0/18
+default interface Port-channel1
+default interface Port-channel2
+default interface Port-channel3
+
+! ============================================================
+! VLAN
+! ============================================================
 vlan 1100
  exit
 vlan 1101
@@ -36,14 +55,14 @@ vlan 3332
 vlan 3364
  exit
 
-
-
-! APPLY - pve01 / Proxmox bond0 / Port-channel1
-
-interface range GigabitEthernet1/0/10 - 13
- description labvmwhpp01 bond0 LACP member
+! ============================================================
+! pve01 / bond0 / port1-1 - port1-3 / Port-channel1
+! ============================================================
+interface range GigabitEthernet1/0/10 - 12
+ description pve01 bond0 LACP member
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ switchport nonegotiate
  speed auto
  duplex auto
  channel-group 1 mode active
@@ -51,19 +70,22 @@ interface range GigabitEthernet1/0/10 - 13
  exit
 
 interface Port-channel1
- description labvmwhpp01 bond0 LACP
+ description pve01 bond0 LACP
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
  no shutdown
  exit
 
-
-
-! APPLY - pve02/ Proxmox bond0 / Port-channel2
-interface range GigabitEthernet1/0/14 - 17
- description labvmwhpp02 bond0 LACP member
+! ============================================================
+! pve02 / bond0 / port1-1 - port1-3 / Port-channel2
+! ============================================================
+interface range GigabitEthernet1/0/13 - 15
+ description pve02 bond0 LACP member
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ switchport nonegotiate
  speed auto
  duplex auto
  channel-group 2 mode active
@@ -71,18 +93,22 @@ interface range GigabitEthernet1/0/14 - 17
  exit
 
 interface Port-channel2
- description labvmwhpp02 bond0 LACP
+ description pve02 bond0 LACP
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
  no shutdown
  exit
 
-
-! APPLY - pve03 / Proxmox bond0 / Port-channel3
-interface range GigabitEthernet1/0/18 - 21
- description labvmwhpp03 bond0 LACP member
+! ============================================================
+! pve03 / bond0 / port1-1 - port1-3 / Port-channel3
+! ============================================================
+interface range GigabitEthernet1/0/16 - 18
+ description pve03 bond0 LACP member
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ switchport nonegotiate
  speed auto
  duplex auto
  channel-group 3 mode active
@@ -90,9 +116,11 @@ interface range GigabitEthernet1/0/18 - 21
  exit
 
 interface Port-channel3
- description labvmwhpp03 bond0 LACP
+ description pve03 bond0 LACP
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
  no shutdown
  exit
 
