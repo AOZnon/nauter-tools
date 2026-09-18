@@ -1,6 +1,21 @@
 enable
 configure terminal
 
+! ============================================================
+! RESET TARGET INTERFACES FIRST
+! ============================================================
+default interface GigabitEthernet1/0/10
+default interface GigabitEthernet1/0/11
+default interface GigabitEthernet1/0/12
+default interface GigabitEthernet1/0/13
+default interface GigabitEthernet1/0/14
+default interface GigabitEthernet1/0/15
+default interface Port-channel1
+default interface Port-channel2
+
+! ============================================================
+! VLAN
+! ============================================================
 vlan 1100
  exit
 vlan 1101
@@ -36,11 +51,14 @@ vlan 3332
 vlan 3364
  exit
 
-! APPLY - pve04 / Proxmox bond0 / Port-channel1
-interface range GigabitEthernet1/0/10 - 13
+! ============================================================
+! pve04 / bond0 / port1-1 - port1-3 / Port-channel1
+! ============================================================
+interface range GigabitEthernet1/0/10 - 12
  description pve04 bond0 LACP member
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ switchport nonegotiate
  speed auto
  duplex auto
  channel-group 1 mode active
@@ -51,14 +69,19 @@ interface Port-channel1
  description pve04 bond0 LACP
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
  no shutdown
  exit
 
-! APPLY - pve05 / Proxmox bond0 / Port-channel2
-interface range GigabitEthernet1/0/14 - 17
+! ============================================================
+! pve05 / bond0 / port1-1 - port1-3 / Port-channel2
+! ============================================================
+interface range GigabitEthernet1/0/13 - 15
  description pve05 bond0 LACP member
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ switchport nonegotiate
  speed auto
  duplex auto
  channel-group 2 mode active
@@ -69,6 +92,8 @@ interface Port-channel2
  description pve05 bond0 LACP
  switchport mode trunk
  switchport trunk allowed vlan 1100-1103,1132-1135,1164-1167,2200-2201,3300,3332,3364
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
  no shutdown
  exit
 
