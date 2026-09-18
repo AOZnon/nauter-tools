@@ -1,0 +1,230 @@
+enable
+configure terminal
+
+! ============================================================
+! RESET TARGET INTERFACES FIRST
+! ============================================================
+default interface GigabitEthernet1/0/10
+default interface GigabitEthernet1/0/11
+default interface GigabitEthernet1/0/12
+default interface GigabitEthernet1/0/13
+default interface GigabitEthernet1/0/14
+default interface GigabitEthernet1/0/15
+default interface GigabitEthernet1/0/16
+default interface GigabitEthernet1/0/17
+default interface GigabitEthernet1/0/18
+default interface GigabitEthernet1/0/19
+default interface GigabitEthernet1/0/20
+default interface GigabitEthernet1/0/21
+default interface GigabitEthernet1/0/22
+default interface GigabitEthernet1/0/23
+default interface GigabitEthernet1/0/24
+default interface Port-channel1
+default interface Port-channel2
+default interface Port-channel3
+
+! ============================================================
+! VLAN
+! ============================================================
+vlan 104
+ exit
+vlan 105
+ exit
+vlan 106
+ exit
+vlan 107
+ exit
+vlan 112
+ exit
+vlan 113
+ exit
+vlan 114
+ exit
+vlan 115
+ exit
+vlan 136
+ exit
+vlan 137
+ exit
+vlan 138
+ exit
+vlan 139
+ exit
+vlan 144
+ exit
+vlan 145
+ exit
+vlan 146
+ exit
+vlan 147
+ exit
+vlan 168
+ exit
+vlan 169
+ exit
+vlan 171
+ exit
+vlan 176
+ exit
+vlan 177
+ exit
+vlan 179
+ exit
+vlan 180
+ exit
+vlan 181
+ exit
+vlan 184
+ exit
+vlan 185
+ exit
+vlan 201
+ exit
+vlan 208
+ exit
+vlan 209
+ exit
+vlan 210
+ exit
+vlan 211
+ exit
+vlan 997
+ exit
+vlan 998
+ exit
+
+! ============================================================
+! pve04 / bond1 / port2-1 - port2-4 / Port-channel1
+! ============================================================
+interface range GigabitEthernet1/0/10 - 13
+ description pve04 bond1 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ channel-group 1 mode active
+ no shutdown
+ exit
+
+interface Port-channel1
+ description pve04 bond1 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! pve04 / Management / port1-4
+interface GigabitEthernet1/0/14
+ description pve04 Management port1-4
+ switchport mode access
+ switchport access vlan 208
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! ============================================================
+! pve05 / bond1 / port2-1 - port2-4 / Port-channel2
+! ============================================================
+interface range GigabitEthernet1/0/15 - 18
+ description pve05 bond1 LACP member
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ channel-group 2 mode active
+ no shutdown
+ exit
+
+interface Port-channel2
+ description pve05 bond1 LACP
+ switchport mode trunk
+ switchport trunk allowed vlan 104-107,112-115,136-139,144-147,168-169,171,176-177,179-181,184-185,208-211,997-998
+ spanning-tree portfast trunk
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! pve05 / Management / port1-4
+interface GigabitEthernet1/0/19
+ description pve05 Management port1-4
+ switchport mode access
+ switchport access vlan 208
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! ============================================================
+! pbs01 / bond0 / port1-1 - port1-2 / Port-channel3 / VLAN136
+! ============================================================
+interface range GigabitEthernet1/0/20 - 21
+ description pbs01 bond0 LACP member
+ switchport mode access
+ switchport access vlan 136
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ channel-group 3 mode active
+ no shutdown
+ exit
+
+interface Port-channel3
+ description pbs01 bond0 LACP
+ switchport mode access
+ switchport access vlan 136
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+! ============================================================
+! BMC / VLAN201
+! ============================================================
+interface GigabitEthernet1/0/22
+ description pve04 BMC
+ switchport mode access
+ switchport access vlan 201
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+interface GigabitEthernet1/0/23
+ description pve05 BMC
+ switchport mode access
+ switchport access vlan 201
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+interface GigabitEthernet1/0/24
+ description pbs01 BMC
+ switchport mode access
+ switchport access vlan 201
+ switchport nonegotiate
+ speed auto
+ duplex auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ no shutdown
+ exit
+
+end
