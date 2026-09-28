@@ -1,0 +1,108 @@
+enable
+configure terminal
+
+! ============================================================
+! COMMON CATALYST SWITCH BASELINE
+! ============================================================
+! Replace placeholders before execution.
+! Do NOT paste placeholder strings literally.
+!
+! <HOSTNAME>          : switch hostname
+! <MGMT_IP>           : FastEthernet0 management IP
+! <MGMT_NETMASK>      : FastEthernet0 management netmask
+! <ENABLE_SECRET>     : privileged EXEC enable secret
+! <LABADMIN_PASSWORD> : local labadmin password
+!
+! Example account model:
+!   labadmin = privilege 15 local administrator for SSH / HTTPS
+!   enable secret = console / privilege escalation fallback
+!
+! This baseline intentionally does NOT define workload VLANs,
+! Port-channels, server-facing switchports, or unrelated ports.
+
+! ============================================================
+! SYSTEM
+! ============================================================
+hostname <HOSTNAME>
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+no service password-encryption
+logging buffered 16384 informational
+clock timezone JST 9 0
+
+no ip domain-lookup
+ip domain-name lab.lan
+vtp mode transparent
+lldp run
+
+! ============================================================
+! LOCAL ACCOUNT / AAA
+! ============================================================
+enable secret <ENABLE_SECRET>
+no enable password
+username labadmin privilege 15 secret <LABADMIN_PASSWORD>
+
+aaa new-model
+aaa authentication login default local
+aaa authorization exec default local
+
+! Remove legacy local accounts only after labadmin login is verified:
+!   no username <LEGACY_USERNAME>
+
+! ============================================================
+! OOB MANAGEMENT / SSH
+! ============================================================
+interface FastEthernet0
+ description OOB Management SSH
+ ip address <MGMT_IP> <MGMT_NETMASK>
+ no shutdown
+ exit
+
+interface Vlan1
+ no ip address
+ shutdown
+ exit
+
+ip ssh version 2
+ip scp server enable
+
+line con 0
+ exec-timeout 30 0
+ logging synchronous
+ exit
+
+line vty 0 15
+ exec-timeout 30 0
+ transport input ssh
+ exit
+
+! ============================================================
+! HTTPS MANAGEMENT UI
+! ============================================================
+! HTTP is disabled. HTTPS authenticates against the local user database.
+! The device-local self-signed PKI certificate is generated/managed by IOS
+! and must not be copied between switches or committed to Git.
+no ip http server
+ip http authentication local
+ip http secure-server
+
+! ============================================================
+! NTP
+! ============================================================
+ntp server 10.128.0.1 prefer
+ntp server 10.128.0.2
+
+end
+
+! ============================================================
+! VALIDATION / SAVE
+! ============================================================
+! show running-config | include ^hostname|^enable|^username|^aaa
+! show running-config interface FastEthernet0
+! show running-config | section line
+! show ip http server status
+! show crypto pki trustpoints
+! show ntp status
+!
+! After validation:
+!   write memory
