@@ -2,7 +2,77 @@ enable
 configure terminal
 
 ! ============================================================
-! RESET TARGET INTERFACES FIRST
+! IMPORTANT - REPLACE BEFORE EXECUTION
+! ============================================================
+! <SW03_MGMT_IP>      : FastEthernet0 management IP for SW#03
+! <ENABLE_SECRET>     : local enable secret
+! <LABADMIN_PASSWORD> : local labadmin password
+! Do not commit real passwords/secrets to this repository.
+!
+! SW#03 management IP was not established in the repository history,
+! therefore it is intentionally left as an explicit placeholder.
+!
+! This artifact owns Gi1/0/10-27 and Port-channel1-3 only.
+! Do not reset/shutdown other switch ports; this is a shared lab switch.
+
+! ============================================================
+! COMMON BASE / MANAGEMENT
+! ============================================================
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+logging buffered 16384 informational
+clock timezone JST 9 0
+
+no aaa new-model
+no ip domain-lookup
+ip domain-name lab.lan
+vtp mode transparent
+lldp run
+
+enable secret <ENABLE_SECRET>
+username labadmin privilege 15 secret <LABADMIN_PASSWORD>
+
+! OOB management / SSH
+interface FastEthernet0
+ description OOB Management SSH
+ ip address <SW03_MGMT_IP> 255.255.255.0
+ no shutdown
+ exit
+
+! SSH / SCP
+ip ssh version 2
+ip scp server enable
+
+! HTTPS Web UI - HTTP remains disabled
+! The switch generates/uses its device-local self-signed PKI certificate.
+! Do not copy TP-self-signed certificates between switches.
+no ip http server
+ip http secure-server
+ip http authentication local
+
+line con 0
+ exec-timeout 30 0
+ logging synchronous
+ login local
+ exit
+
+line vty 0 15
+ exec-timeout 30 0
+ login local
+ transport input ssh
+ exit
+
+! NTP
+ntp server 10.128.0.1 prefer
+ntp server 10.128.0.2
+
+! NOTE:
+! If 10.128.0.1/2 are not reachable from FastEthernet0 subnet,
+! configure the correct device-specific management default gateway:
+!   ip default-gateway <MGMT_DEFAULT_GATEWAY>
+
+! ============================================================
+! RESET OWNED INTERFACES FIRST
 ! ============================================================
 default interface GigabitEthernet1/0/10
 default interface GigabitEthernet1/0/11
@@ -244,3 +314,30 @@ interface GigabitEthernet1/0/27
  exit
 
 end
+
+! ============================================================
+! POST-CHECK (EXEC MODE)
+! ============================================================
+! Verify labadmin SSH login in a second session before removing legacy users.
+! Then remove any legacy local usernames manually:
+!   show running-config | include ^username
+!   configure terminal
+!   no username <LEGACY_USERNAME>
+!   end
+!
+! Validation:
+!   show interfaces status
+!   show vlan brief
+!   show interfaces trunk
+!   show etherchannel summary
+!   show lacp neighbor
+!   show ip interface brief
+!   show ntp associations
+!   show ntp status
+!   show clock detail
+!   show ip http server status
+!   show crypto pki trustpoints
+!   show lldp neighbors
+!
+! Save after validation:
+!   write memory
