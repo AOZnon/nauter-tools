@@ -2,7 +2,71 @@ enable
 configure terminal
 
 ! ============================================================
-! RESET TARGET INTERFACES FIRST
+! IMPORTANT - REPLACE BEFORE EXECUTION
+! ============================================================
+! Replace placeholders with real values before pasting.
+! Do NOT paste <ENABLE_SECRET> or <LABADMIN_PASSWORD> literally.
+! <ENABLE_SECRET>     : local enable secret
+! <LABADMIN_PASSWORD> : local labadmin password
+!
+! Managed scope: Gi1/0/10-18 and Port-channel1-3.
+! Do not reset/shutdown unrelated switch ports.
+
+! ============================================================
+! COMMON BASE / MANAGEMENT
+! ============================================================
+hostname LAB-FCC-BLU-SA01
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+no service password-encryption
+logging buffered 16384 informational
+clock timezone JST 9 0
+
+no ip domain-lookup
+ip domain-name lab.lan
+vtp mode transparent
+lldp run
+
+enable secret <ENABLE_SECRET>
+no enable password
+username labadmin privilege 15 secret <LABADMIN_PASSWORD>
+
+aaa new-model
+aaa authentication login default local
+aaa authorization exec default local
+
+interface FastEthernet0
+ description OOB Management SSH
+ ip address 172.24.250.133 255.255.255.0
+ no shutdown
+ exit
+
+interface Vlan1
+ no ip address
+ shutdown
+ exit
+
+no ip http server
+ip http authentication local
+ip http secure-server
+ip ssh version 2
+ip scp server enable
+
+line con 0
+ exec-timeout 30 0
+ logging synchronous
+ exit
+
+line vty 0 15
+ exec-timeout 30 0
+ transport input ssh
+ exit
+
+ntp server 10.128.0.1 prefer
+ntp server 10.128.0.2
+
+! ============================================================
+! RESET OWNED INTERFACES
 ! ============================================================
 default interface GigabitEthernet1/0/10
 default interface GigabitEthernet1/0/11
@@ -18,7 +82,7 @@ default interface Port-channel2
 default interface Port-channel3
 
 ! ============================================================
-! VLAN
+! REQUIRED VLAN
 ! ============================================================
 vlan 1100
  exit
@@ -56,7 +120,7 @@ vlan 3364
  exit
 
 ! ============================================================
-! pve01 / bond0 / port1-1 - port1-3 / Port-channel1
+! pve01 / bond0 / Gi10-12 / Port-channel1
 ! ============================================================
 interface range GigabitEthernet1/0/10 - 12
  description pve01 bond0 LACP member
@@ -79,7 +143,7 @@ interface Port-channel1
  exit
 
 ! ============================================================
-! pve02 / bond0 / port1-1 - port1-3 / Port-channel2
+! pve02 / bond0 / Gi13-15 / Port-channel2
 ! ============================================================
 interface range GigabitEthernet1/0/13 - 15
  description pve02 bond0 LACP member
@@ -102,7 +166,7 @@ interface Port-channel2
  exit
 
 ! ============================================================
-! pve03 / bond0 / port1-1 - port1-3 / Port-channel3
+! pve03 / bond0 / Gi16-18 / Port-channel3
 ! ============================================================
 interface range GigabitEthernet1/0/16 - 18
  description pve03 bond0 LACP member
@@ -125,3 +189,11 @@ interface Port-channel3
  exit
 
 end
+
+! Remove legacy local users only after labadmin login is verified:
+!   configure terminal
+!   no username <LEGACY_USERNAME>
+!   end
+!
+! Save after validation:
+!   write memory
