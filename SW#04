@@ -2,7 +2,75 @@ enable
 configure terminal
 
 ! ============================================================
-! RESET TARGET INTERFACES FIRST
+! IMPORTANT - REPLACE BEFORE EXECUTION
+! ============================================================
+! <ENABLE_SECRET>     : local enable secret
+! <LABADMIN_PASSWORD> : local labadmin password
+! Do not commit real passwords/secrets to this repository.
+!
+! SW#04 FastEthernet0 management IP is fixed at 172.24.250.148/24.
+!
+! This artifact owns Gi1/0/10-26 and Port-channel1-3 only.
+! Do not reset/shutdown other switch ports; this is a shared lab switch.
+
+! ============================================================
+! COMMON BASE / MANAGEMENT
+! ============================================================
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+logging buffered 16384 informational
+clock timezone JST 9 0
+
+no aaa new-model
+no ip domain-lookup
+ip domain-name lab.lan
+vtp mode transparent
+lldp run
+
+enable secret <ENABLE_SECRET>
+username labadmin privilege 15 secret <LABADMIN_PASSWORD>
+
+! OOB management / SSH
+interface FastEthernet0
+ description OOB Management SSH
+ ip address 172.24.250.148 255.255.255.0
+ no shutdown
+ exit
+
+! SSH / SCP
+ip ssh version 2
+ip scp server enable
+
+! HTTPS Web UI - HTTP remains disabled
+! The switch generates/uses its device-local self-signed PKI certificate.
+! Do not copy TP-self-signed certificates between switches.
+no ip http server
+ip http secure-server
+ip http authentication local
+
+line con 0
+ exec-timeout 30 0
+ logging synchronous
+ login local
+ exit
+
+line vty 0 15
+ exec-timeout 30 0
+ login local
+ transport input ssh
+ exit
+
+! NTP
+ntp server 10.128.0.1 prefer
+ntp server 10.128.0.2
+
+! NOTE:
+! If 10.128.0.1/2 are not reachable from FastEthernet0 subnet,
+! configure the correct device-specific management default gateway:
+!   ip default-gateway <MGMT_DEFAULT_GATEWAY>
+
+! ============================================================
+! RESET OWNED INTERFACES FIRST
 ! ============================================================
 default interface GigabitEthernet1/0/10
 default interface GigabitEthernet1/0/11
@@ -19,6 +87,8 @@ default interface GigabitEthernet1/0/21
 default interface GigabitEthernet1/0/22
 default interface GigabitEthernet1/0/23
 default interface GigabitEthernet1/0/24
+default interface GigabitEthernet1/0/25
+default interface GigabitEthernet1/0/26
 default interface Port-channel1
 default interface Port-channel2
 default interface Port-channel3
@@ -166,9 +236,9 @@ interface GigabitEthernet1/0/19
  exit
 
 ! ============================================================
-! pbs01 / bond0 / port1-1 - port1-2 / Port-channel3 / VLAN136
+! pbs01 / bond0 / port1-1 - port1-4 / Port-channel3 / VLAN136
 ! ============================================================
-interface range GigabitEthernet1/0/20 - 21
+interface range GigabitEthernet1/0/20 - 23
  description pbs01 bond0 LACP member
  switchport mode access
  switchport access vlan 136
@@ -191,7 +261,7 @@ interface Port-channel3
 ! ============================================================
 ! BMC / VLAN201
 ! ============================================================
-interface GigabitEthernet1/0/22
+interface GigabitEthernet1/0/24
  description pve04 BMC
  switchport mode access
  switchport access vlan 201
@@ -203,7 +273,7 @@ interface GigabitEthernet1/0/22
  no shutdown
  exit
 
-interface GigabitEthernet1/0/23
+interface GigabitEthernet1/0/25
  description pve05 BMC
  switchport mode access
  switchport access vlan 201
@@ -215,7 +285,7 @@ interface GigabitEthernet1/0/23
  no shutdown
  exit
 
-interface GigabitEthernet1/0/24
+interface GigabitEthernet1/0/26
  description pbs01 BMC
  switchport mode access
  switchport access vlan 201
@@ -228,3 +298,30 @@ interface GigabitEthernet1/0/24
  exit
 
 end
+
+! ============================================================
+! POST-CHECK (EXEC MODE)
+! ============================================================
+! Verify labadmin SSH login in a second session before removing legacy users.
+! Then remove any legacy local usernames manually:
+!   show running-config | include ^username
+!   configure terminal
+!   no username <LEGACY_USERNAME>
+!   end
+!
+! Validation:
+!   show interfaces status
+!   show vlan brief
+!   show interfaces trunk
+!   show etherchannel summary
+!   show lacp neighbor
+!   show ip interface brief
+!   show ntp associations
+!   show ntp status
+!   show clock detail
+!   show ip http server status
+!   show crypto pki trustpoints
+!   show lldp neighbors
+!
+! Save after validation:
+!   write memory
