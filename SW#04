@@ -4,73 +4,69 @@ configure terminal
 ! ============================================================
 ! IMPORTANT - REPLACE BEFORE EXECUTION
 ! ============================================================
+! Replace placeholders with real values before pasting.
+! Do NOT paste <ENABLE_SECRET> or <LABADMIN_PASSWORD> literally.
 ! <ENABLE_SECRET>     : local enable secret
 ! <LABADMIN_PASSWORD> : local labadmin password
-! Do not commit real passwords/secrets to this repository.
 !
-! SW#04 FastEthernet0 management IP is fixed at 172.24.250.148/24.
-!
-! This artifact owns Gi1/0/10-26 and Port-channel1-3 only.
-! Do not reset/shutdown other switch ports; this is a shared lab switch.
+! Managed scope: Gi1/0/10-26 and Port-channel1-3.
+! Do not reset/shutdown unrelated switch ports or unrelated VLANs.
 
 ! ============================================================
 ! COMMON BASE / MANAGEMENT
 ! ============================================================
+hostname LAB-FCC-RED-SA02
 service timestamps debug datetime msec localtime show-timezone
 service timestamps log datetime msec localtime show-timezone
+no service password-encryption
 logging buffered 16384 informational
 clock timezone JST 9 0
 
-no aaa new-model
 no ip domain-lookup
 ip domain-name lab.lan
 vtp mode transparent
 lldp run
 
 enable secret <ENABLE_SECRET>
+no enable password
 username labadmin privilege 15 secret <LABADMIN_PASSWORD>
 
-! OOB management / SSH
+aaa new-model
+aaa authentication login default local
+aaa authorization exec default local
+
 interface FastEthernet0
  description OOB Management SSH
  ip address 172.24.250.148 255.255.255.0
  no shutdown
  exit
 
-! SSH / SCP
+interface Vlan1
+ no ip address
+ shutdown
+ exit
+
+no ip http server
+ip http authentication local
+ip http secure-server
 ip ssh version 2
 ip scp server enable
-
-! HTTPS Web UI - HTTP remains disabled
-! The switch generates/uses its device-local self-signed PKI certificate.
-! Do not copy TP-self-signed certificates between switches.
-no ip http server
-ip http secure-server
-ip http authentication local
 
 line con 0
  exec-timeout 30 0
  logging synchronous
- login local
  exit
 
 line vty 0 15
  exec-timeout 30 0
- login local
  transport input ssh
  exit
 
-! NTP
 ntp server 10.128.0.1 prefer
 ntp server 10.128.0.2
 
-! NOTE:
-! If 10.128.0.1/2 are not reachable from FastEthernet0 subnet,
-! configure the correct device-specific management default gateway:
-!   ip default-gateway <MGMT_DEFAULT_GATEWAY>
-
 ! ============================================================
-! RESET OWNED INTERFACES FIRST
+! RESET OWNED INTERFACES
 ! ============================================================
 default interface GigabitEthernet1/0/10
 default interface GigabitEthernet1/0/11
@@ -94,7 +90,7 @@ default interface Port-channel2
 default interface Port-channel3
 
 ! ============================================================
-! VLAN
+! REQUIRED VLAN
 ! ============================================================
 vlan 104
  exit
@@ -164,7 +160,7 @@ vlan 998
  exit
 
 ! ============================================================
-! pve04 / bond1 / port2-1 - port2-4 / Port-channel1
+! pve04 / bond1 / Gi10-13 / Port-channel1
 ! ============================================================
 interface range GigabitEthernet1/0/10 - 13
  description pve04 bond1 LACP member
@@ -186,7 +182,6 @@ interface Port-channel1
  no shutdown
  exit
 
-! pve04 / Management / port1-4
 interface GigabitEthernet1/0/14
  description pve04 Management port1-4
  switchport mode access
@@ -200,7 +195,7 @@ interface GigabitEthernet1/0/14
  exit
 
 ! ============================================================
-! pve05 / bond1 / port2-1 - port2-4 / Port-channel2
+! pve05 / bond1 / Gi15-18 / Port-channel2
 ! ============================================================
 interface range GigabitEthernet1/0/15 - 18
  description pve05 bond1 LACP member
@@ -222,7 +217,6 @@ interface Port-channel2
  no shutdown
  exit
 
-! pve05 / Management / port1-4
 interface GigabitEthernet1/0/19
  description pve05 Management port1-4
  switchport mode access
@@ -236,7 +230,7 @@ interface GigabitEthernet1/0/19
  exit
 
 ! ============================================================
-! pbs01 / bond0 / port1-1 - port1-4 / Port-channel3 / VLAN136
+! pbs01 / bond0 / Gi20-23 / Port-channel3 / VLAN136
 ! ============================================================
 interface range GigabitEthernet1/0/20 - 23
  description pbs01 bond0 LACP member
@@ -299,29 +293,10 @@ interface GigabitEthernet1/0/26
 
 end
 
-! ============================================================
-! POST-CHECK (EXEC MODE)
-! ============================================================
-! Verify labadmin SSH login in a second session before removing legacy users.
-! Then remove any legacy local usernames manually:
-!   show running-config | include ^username
+! Remove legacy local users only after labadmin login is verified:
 !   configure terminal
 !   no username <LEGACY_USERNAME>
 !   end
-!
-! Validation:
-!   show interfaces status
-!   show vlan brief
-!   show interfaces trunk
-!   show etherchannel summary
-!   show lacp neighbor
-!   show ip interface brief
-!   show ntp associations
-!   show ntp status
-!   show clock detail
-!   show ip http server status
-!   show crypto pki trustpoints
-!   show lldp neighbors
 !
 ! Save after validation:
 !   write memory
